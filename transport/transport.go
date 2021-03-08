@@ -49,6 +49,9 @@ func (trg *Target) Addr() string {
 		port = *trg.Port
 	}
 
+	if strings.IndexByte(host, ':') > -1 && strings.IndexByte(host, '[') == -1 {
+		host = fmt.Sprintf("[%s]", host)
+	}
 	return fmt.Sprintf("%v:%v", host, port)
 }
 
@@ -71,6 +74,11 @@ func NewTarget(host string, port int) *Target {
 }
 
 func NewTargetFromAddr(addr string) (*Target, error) {
+	if strings.Count(addr, ":") > 1 && strings.LastIndexByte(addr, '[') == -1 {
+		// properly format IPv6 IP addresses
+		last := strings.LastIndexByte(addr, ':')
+		addr = fmt.Sprintf("[%s]%s", addr[0:last], addr[last:])
+	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err

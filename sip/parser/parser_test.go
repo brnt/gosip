@@ -297,6 +297,12 @@ func TestHostPort(t *testing.T) {
 		{hostPortInput("abc123:5060"), &hostPortResult{pass, "abc123", &port5060}},
 		{hostPortInput("abc123:9"), &hostPortResult{pass, "abc123", &port9}},
 		// TODO IPV6, c.f. IPv6reference in RFC 3261 s25
+		{hostPortInput("::1"), &hostPortResult{pass, "::1", nil}},
+		{hostPortInput("[::1]"), &hostPortResult{pass, "::1", nil}},
+		{hostPortInput("[::1]:9"), &hostPortResult{pass, "::1", &port9}},
+		{hostPortInput("[fe80::1]:9"), &hostPortResult{pass, "fe80::1", &port9}},
+		{hostPortInput("2001:0db8:85a3:0000:0000:8a2e:0370:7334"), &hostPortResult{pass, "2001:0db8:85a3:0000:0000:8a2e:0370:7334", nil}},
+		{hostPortInput("[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:5060"), &hostPortResult{pass, "2001:0db8:85a3:0000:0000:8a2e:0370:7334", &port5060}},
 	}, t)
 }
 

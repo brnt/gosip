@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,13 @@ const abnfWs = " \t"
 // The maximum permissible CSeq number in a SIP message (2**31 - 1).
 // C.f. RFC 3261 S. 8.1.1.5.
 const maxCseq = 2147483647
+
+// A list of patterns to compare against IPv6 URIs
+var ipv6Patterns []*regexp.Regexp = []*regexp.Regexp{
+	regexp.MustCompile(`sip[s]?:(?P<user>)@(?P<host>([a-f0-9]{0,4}:)+)(;(P<params>(.*)))$`),                          // sip:foo@::1
+	regexp.MustCompile(`sip[s]?:(?P<user>[^@]+)@\[(?P<host>([a-f0-9]{0,4}:?)+)\](;(P<params>(.*)))?$`),               // sip:foo@[::1]
+	regexp.MustCompile(`sip[s]?:(?P<user>[^@]+)@\[(?P<host>([a-f0-9]{0,4}:?)+)\]:(?P<port>\d+)(;(P<params>(.*)))?$`), // sip:foo@[::1]:5060
+}
 
 // The buffer size of the parser input channel.
 
@@ -560,13 +568,41 @@ func ParseStatusLine(statusLine string) (
 	return
 }
 
-// parseUri converts a string representation of a URI into a Uri object.
+func parseUriIPv6(uriStr string) (uri sip.Uri, err error) {
+	for _, r := range ipv6Patterns {
+		if r.MatchString(uriStr) {
+			sUri, err := ParseSipUri(uriStr)
+			return &sUri, err
+		}
+	}
+	return nil, fmt.Errorf("String did not contain a valid URI: %s", uriStr)
+
+}
+
+// Simplistically checks for three or more colons `:` (1 - protocol, 1 - port (optional), 2 - host).
+// `sip:foo@bar:5060` is ipv4
+// `sip:foo@[::1]:5060` and `sip:foo@::1` are ipv6
+func isIPv6Uri(uriStr string) bool {
+	return strings.Count(uriStr, ":") > 2
+}
+
+// Simplistically checks for two or more colons `:`. Similar to `isIPv6Uri()`
+// except that it doesn't expect the protocol prefix `sip:` or `sips:`.
+func isIPv6Host(host string) bool {
+	return strings.Count(host, ":") >= 2
+}
+
+// ParseUri converts a string representation of a URI into a Uri object.
 // If the URI is malformed, or the URI schema is not recognised, an error is returned.
 // URIs have the general form of schema:address.
 func ParseUri(uriStr string) (uri sip.Uri, err error) {
 	if strings.TrimSpace(uriStr) == "*" {
 		// Wildcard '*' URI used in the Contact headers of REGISTERs when unregistering.
 		return sip.WildcardUri{}, nil
+	}
+
+	if isIPv6Uri(uriStr) {
+		return parseUriIPv6(uriStr)
 	}
 
 	colonIdx := strings.Index(uriStr, ":")
@@ -700,16 +736,33 @@ func ParseSipUri(uriStr string) (uri sip.SipUri, err error) {
 // The port may or may not be present, so we represent it with a *uint16,
 // and return 'nil' if no port was present.
 func ParseHostPort(rawText string) (host string, port *sip.Port, err error) {
-	colonIdx := strings.Index(rawText, ":")
-	if colonIdx == -1 {
+	colonIdx := strings.LastIndex(rawText, ":")
+	if colonIdx == -1 { // ipv4 and no port
 		host = rawText
 		return
+	}
+
+	if isIPv6Host(rawText) {
+		openBracketIdx := strings.IndexByte(rawText, '[')
+		closeBracketIdx := strings.IndexByte(rawText, ']')
+		if openBracketIdx > -1 && closeBracketIdx > 0 {
+			host = rawText[openBracketIdx+1 : closeBracketIdx]
+			if len(rawText) > closeBracketIdx+1 && rawText[closeBracketIdx+1] == ':' {
+				colonIdx = closeBracketIdx + 1 // for extracting port below
+			} else {
+				return
+			}
+		} else { // no brackets
+			host = rawText
+			return
+		}
+	} else {
+		host = rawText[:colonIdx]
 	}
 
 	// Surely there must be a better way..!
 	var portRaw64 uint64
 	var portRaw16 uint16
-	host = rawText[:colonIdx]
 	portRaw64, err = strconv.ParseUint(rawText[colonIdx+1:], 10, 16)
 	portRaw16 = uint16(portRaw64)
 	port = (*sip.Port)(&portRaw16)
