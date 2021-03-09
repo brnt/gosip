@@ -27,9 +27,10 @@ const maxCseq = 2147483647
 
 // A list of patterns to compare against IPv6 URIs
 var ipv6Patterns []*regexp.Regexp = []*regexp.Regexp{
-	regexp.MustCompile(`sip[s]?:(?P<user>)@(?P<host>([a-f0-9]{0,4}:)+)(;(P<params>(.*)))$`),                          // sip:foo@::1
-	regexp.MustCompile(`sip[s]?:(?P<user>[^@]+)@\[(?P<host>([a-f0-9]{0,4}:?)+)\](;(P<params>(.*)))?$`),               // sip:foo@[::1]
-	regexp.MustCompile(`sip[s]?:(?P<user>[^@]+)@\[(?P<host>([a-f0-9]{0,4}:?)+)\]:(?P<port>\d+)(;(P<params>(.*)))?$`), // sip:foo@[::1]:5060
+	// sip:foo@::1
+	regexp.MustCompile(`sip[s]?:(?P<user>[^@]+)@(?P<host>([a-f0-9]{0,4}:?)+)(;(?P<params>(.*)))?$`),
+	// sip:foo@[::1]:5060 | sip:foo@[::1]
+	regexp.MustCompile(`sip[s]?:(?P<user>[^@]+)@\[(?P<host>([a-f0-9]{0,4}:?)+)\](:(?P<port>\d+))?(;(?P<params>(.*)))?$`),
 }
 
 // The buffer size of the parser input channel.
