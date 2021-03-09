@@ -413,7 +413,13 @@ func (uri *SipUri) String() string {
 	}
 
 	// Compulsory hostname.
+	if strings.IndexByte(uri.FHost, ':') > -1 && uri.FPort != nil {
+		buffer.WriteString("[")
+	}
 	buffer.WriteString(uri.FHost)
+	if strings.IndexByte(uri.FHost, ':') > -1 && uri.FPort != nil {
+		buffer.WriteString("]")
+	}
 
 	// Optional port number.
 	if uri.FPort != nil {
